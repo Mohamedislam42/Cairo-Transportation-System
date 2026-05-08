@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<!-- CAIRO_TRANSPORT_LAB_LEAFLET_UI — if you see "Smart City" + matplotlib chart, wrong folder or cached page -->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <title>Cairo Transport Lab — CSE112</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=cairolab18">
+</head>
+<body class="app-body">
+<div class="app-shell d-flex app-shell-viewport">
+    <aside class="sidebar d-flex flex-column flex-shrink-0">
+        <div class="sidebar-brand">
+            <div class="brand-mark"><i class="fa-solid fa-compass-drafting"></i></div>
+            <div class="brand-text">
+                <div class="brand-title">Cairo Transportation System</div>
+            </div>
+        </div>
+        <nav class="nav flex-column sidebar-nav">
+            <button type="button" class="nav-btn active" data-tab="routing" onclick="showTab('routing', this)">
+                <i class="fa-solid fa-route"></i><span>Routing</span>
+            </button>
+            <button type="button" class="nav-btn" data-tab="emergency" onclick="showTab('emergency', this)">
+                <i class="fa-solid fa-truck-medical"></i><span>Emergency</span>
+            </button>
+            <button type="button" class="nav-btn" data-tab="optimization" onclick="showTab('optimization', this)">
+                <i class="fa-solid fa-sliders"></i><span>Optimize</span>
+            </button>
+        </nav>
+        <div class="sidebar-foot">Flask · Leaflet · OSM</div>
+    </aside>
+
+    <div class="main-stage flex-grow-1 d-flex flex-column min-w-0">
+        <header class="top-strip px-3 px-xl-4 py-2 py-xl-3 d-none d-xl-flex align-items-center justify-content-between flex-shrink-0">
+            <div>
+                <h1 class="h5 mb-0 fw-semibold" id="module-title">Standard routing</h1>
+                <p class="text-muted mb-0 small">Greater Cairo sandbox graph — Greater Cairo GIS backdrop</p>
+            </div>
+            <span class="badge rounded-pill live-pill"><span class="live-dot"></span> Live visualization</span>
+        </header>
+
+        <div class="row g-0 main-row">
+            <div class="col-12 col-xl-5 panel-col border-end d-flex flex-column">
+                <div class="scrollable-panel px-3 px-md-4 py-3" tabindex="0">
+
+                    <div class="d-xl-none mb-3">
+                        <h1 class="h5 fw-semibold mb-0" id="module-title-mobile">Standard routing</h1>
+                        <p class="text-muted small mb-0">Adjust inputs, then use the map on the right.</p>
+                    </div>
+
+                    <div id="routing" class="tab-content">
+                        <div class="dash-card mb-3">
+                            <div class="dash-card-head">
+                                <h2 class="h6 mb-0"><i class="fa-solid fa-car-side me-2 text-accent"></i>Shortest path</h2>
+                            </div>
+                            <p class="text-muted small mb-3">Time-varying travel times by slot; optional road closures for detour planning.</p>
+                            <div class="row g-2 mb-2">
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-semibold">Origin</label>
+                                    <select id="source" class="form-select form-select-sm" aria-label="Origin">
+                                      {% for n in nodes_sorted %}<option value="{{ n.id }}"{% if n.id == '1' %} selected{% endif %}>{{ n.id }} · {{ n.name }}</option>{% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-semibold">Destination</label>
+                                    <select id="target" class="form-select form-select-sm" aria-label="Destination">
+                                      {% for n in nodes_sorted %}<option value="{{ n.id }}"{% if n.id == '3' %} selected{% endif %}>{{ n.id }} · {{ n.name }}</option>{% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-semibold">Time slot</label>
+                                    <select id="slot" class="form-select form-select-sm">
+                                        <option>morning</option>
+                                        <option>afternoon</option>
+                                        <option>evening</option>
+                                        <option>night</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-semibold">Routing mode</label>
+                                    <select id="routing-algo" class="form-select form-select-sm" title="Adaptive uses the same engine with your slot">
+                                        <option value="dijkstra">Standard (Dijkstra)</option>
+                                        <option value="astar">A* (heuristic)</option>
+                                        <option value="adaptive">Time-dependent label</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <label class="form-label small fw-semibold">Blocked edges <span class="text-muted fw-normal">(optional)</span></label>
+                            <textarea id="blocked-roads" class="form-control form-control-sm font-mono mb-2" rows="2" placeholder="e.g. 3-10&#10;F1-2"></textarea>
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" id="animate-route">
+                                <label class="form-check-label small" for="animate-route">Animate routes</label>
+                            </div>
+                            <p class="text-muted small mb-3" style="font-size: 0.72rem;">Single-run: animates the chosen algorithm. <strong>Compare Dijkstra vs A*</strong>: when checked, draws both paths as a side-by-side race.</p>
+                            <div class="d-grid gap-2">
+                                <button type="button" class="btn btn-accent text-white" onclick="runRoute()">
+                                    <i class="fa-solid fa-play me-2"></i>Run &amp; focus map
+                                </button>
+                                <div class="btn-group">
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="showRouteOnMap()">Redraw only</button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="comparePathsOnMap()" title="With “Animate routes” on: parallel race draw (green vs dashed red)">Compare Dijkstra vs A*</button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="clearRouteLayers()">Clear routes</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="routeResult" class="output-box d-none"></div>
+                    </div>
+
+                    <div id="emergency" class="tab-content d-none">
+                        <div class="dash-card mb-3 border-danger-subtle">
+                            <div class="dash-card-head">
+                                <h2 class="h6 mb-0 text-danger"><i class="fa-solid fa-truck-medical me-2"></i>Emergency A*</h2>
+                                <span class="badge bg-danger">EMS</span>
+                            </div>
+                            <p class="text-muted small mb-3">Heuristic steering toward hospitals during congestion.</p>
+                            <div class="mb-2">
+                                <label class="form-label small fw-semibold">Dispatch from</label>
+                                <select id="em_source" class="form-select form-select-sm" aria-label="Dispatch origin">
+                                  {% for n in nodes_hoods_only %}<option value="{{ n.id }}"{% if n.id == '12' %} selected{% endif %}>{{ n.id }} · {{ n.name }}</option>{% endfor %}
+                                </select>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small fw-semibold">Hospital</label>
+                                <select id="em_target" class="form-select form-select-sm">
+                                    <option value="F9">F9 · Qasr El Aini</option>
+                                    <option value="F10">F10 · Maadi Military</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small fw-semibold">Time slot</label>
+                                <select id="em_slot" class="form-select form-select-sm">
+                                    <option>morning</option>
+                                    <option>afternoon</option>
+                                    <option>evening</option>
+                                    <option>night</option>
+                                </select>
+                            </div>
+                            <div class="d-grid gap-2">
+                                <button type="button" class="btn btn-danger" onclick="runEmergency()">
+                                    <i class="fa-solid fa-bolt me-2"></i>Dispatch &amp; map
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="showEmergencyOnMap()">Redraw A*</button>
+                            </div>
+                        </div>
+                        <div id="emergencyResult" class="output-box d-none"></div>
+                    </div>
+
+                    <div id="optimization" class="tab-content optimization-pane d-none">
+                        <div class="optimization-grid">
+                            <div class="dash-card dash-card-opt optimization-span-2">
+                                <div class="dash-card-head">
+                                    <h2 class="optimization-card-title mb-0"><i class="fa-solid fa-tree text-success me-2"></i>MST expansion</h2>
+                                </div>
+                                <div class="optimization-tools">
+                                    <div class="optimization-mst-row">
+                                        <div class="flex-grow-1 min-w-0">
+                                            <label class="form-label opt-label fw-semibold mb-1">Budget (M EGP) <span id="budget-val" class="text-accent">1000</span></label>
+                                            <input type="range" class="form-range opt-range mb-0" id="mst-budget" min="0" max="5000" step="100" value="1000"
+                                                   oninput="document.getElementById('budget-val').innerText = this.value; this.style.setProperty('--val', ((this.value-this.min)/(this.max-this.min)*100)+'%')">
+                                        </div>
+                                        <div class="form-check form-switch optimization-switch mb-0">
+                                            <input class="form-check-input" type="checkbox" id="include-new-roads" checked>
+                                            <label class="form-check-label opt-switch-label" for="include-new-roads">Candidates</label>
+                                        </div>
+                                    </div>
+                                    <div class="d-flex flex-wrap gap-2">
+                                        <button type="button" class="btn btn-success btn-sm flex-grow-1" onclick="runDynamicMST()">Compute MST</button>
+                                        <button type="button" class="btn btn-outline-success btn-sm flex-grow-1" onclick="outlineMSTOnMap()" title="Uses last MST result">Outline map</button>
+                                    </div>
+                                </div>
+                                <div id="mstResult" class="output-box output-box-opt d-none"></div>
+                            </div>
+
+                            <div class="dash-card dash-card-opt">
+                                <div class="dash-card-head"><h2 class="optimization-card-title mb-0"><i class="fa-solid fa-bus text-info me-2"></i>Bus DP</h2></div>
+                                <label class="form-label opt-label fw-semibold mb-1 mt-2">Route</label>
+                                <select id="transit-route" class="form-select form-select-sm mb-2">
+                                    <option value="ALL">All B1–B10</option>
+                                    <option value="B1">B1 Maadi hub</option><option value="B2">B2 Ring west</option>
+                                    <option value="B3">B3 Airport link</option><option value="B4">B4 Rehab</option>
+                                    <option value="B5">B5 Giza south</option><option value="B6">B6 North belt</option>
+                                    <option value="B7">B7 New Capital</option><option value="B8">B8 Smart Village</option>
+                                    <option value="B9">B9 Cross west</option><option value="B10">B10 Festival</option>
+                                </select>
+                                <label class="form-label opt-label fw-semibold mb-1">Extra buses</label>
+                                <input id="buses" type="number" class="form-control form-control-sm mb-2" value="20" min="1" max="100">
+                                <button type="button" class="btn btn-info text-white btn-sm w-100" onclick="runDynamicTransit()">Optimize fleet</button>
+                                <div id="transitResult" class="output-box output-box-opt d-none"></div>
+                            </div>
+
+                            <div class="dash-card dash-card-opt">
+                                <div class="dash-card-head"><h2 class="optimization-card-title mb-0"><i class="fa-solid fa-screwdriver-wrench me-2"></i>Maintenance DP</h2></div>
+                                <p class="text-muted small mt-2 mb-2 lh-sm" style="font-size: 0.72rem;">0/1 knapsack: picks worn roads (<span class="text-nowrap">condition ≤ 7</span>) to maximize modeled benefit within your budget ceiling.</p>
+                                <label class="form-label opt-label fw-semibold mb-1">Budget ceiling (million EGP)</label>
+                                <input id="maint-budget" type="number" class="form-control form-control-sm mb-2" value="400" min="50" step="50" title="Whole number; DP capacity = this value (same units as per-road repair costs in the engine)">
+                                <button type="button" class="btn btn-secondary btn-sm text-white w-100" onclick="runMaintenance()">Plan repairs</button>
+                                <div id="maintResult" class="output-box output-box-opt d-none" style="border-left-color:#6c757d"></div>
+                            </div>
+
+                            <div class="dash-card dash-card-opt accent-border">
+                                <div class="dash-card-head"><h2 class="optimization-card-title mb-0"><i class="fa-solid fa-wand-magic-sparkles me-2"></i>ML congestion</h2></div>
+                                <div class="row row-cols-2 g-2 mt-2">
+                                    <div class="col">
+                                        <label class="form-label opt-label mb-1">Slot</label>
+                                        <select id="pred-slot" class="form-select form-select-sm">
+                                            <option>morning</option><option>afternoon</option><option>evening</option><option>night</option>
+                                        </select>
+                                    </div>
+                                    <div class="col">
+                                        <label class="form-label opt-label mb-1">Cap/h</label>
+                                        <input id="pred-cap" type="number" class="form-control form-control-sm" value="3000" min="500" step="100">
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label opt-label mb-1">Condition 1–10</label>
+                                        <input id="pred-cond" type="number" class="form-control form-control-sm" value="7" min="1" max="10">
+                                    </div>
+                                </div>
+                                <button type="button" class="btn btn-dark btn-sm w-100 mt-2" onclick="runPredict()">Forecast</button>
+                                <div id="predResult" class="output-box output-box-opt d-none" style="border-left-color:#212529"></div>
+                            </div>
+
+                            <div class="dash-card dash-card-opt">
+                                <div class="dash-card-head"><h2 class="optimization-card-title mb-0"><i class="fa-solid fa-traffic-light text-warning me-2"></i>Signals</h2></div>
+                                <div class="row row-cols-2 g-1 g-sm-2 mt-2 sig-grid-opt">
+                                    <div class="col"><input id="ns" class="form-control form-control-sm" placeholder="N–S" value="50" title="N–S queue"></div>
+                                    <div class="col"><input id="ew" class="form-control form-control-sm" placeholder="E–W" value="40" title="E–W queue"></div>
+                                    <div class="col"><input id="lt" class="form-control form-control-sm" placeholder="Left" value="10" title="Left queue"></div>
+                                    <div class="col"><input id="ped" class="form-control form-control-sm" placeholder="Ped" value="20" title="Ped queue"></div>
+                                </div>
+                                <button type="button" class="btn btn-warning btn-sm text-dark w-100 mt-2" onclick="runSignal()">Greedy timing</button>
+                                <div id="signalResult" class="output-box output-box-opt d-none"></div>
+                            </div>
+
+                            <div class="dash-card dash-card-opt optimization-span-2 bg-dark-subtle racing-card optimization-race">
+                                <div class="d-flex flex-column flex-sm-row align-items-start align-items-sm-center justify-content-between gap-2 mb-2">
+                                    <div class="dash-card-head text-white border-0 p-0 m-0">
+                                        <h2 class="optimization-card-title mb-0 text-warning"><i class="fa-solid fa-flag-checkered me-2"></i>Algorithm race</h2>
+                                    </div>
+                                    <button type="button" class="btn btn-warning btn-sm fw-semibold flex-shrink-0" onclick="raceAlgorithms()">Open bench</button>
+                                </div>
+                                <p class="text-secondary small mb-0 optimization-race-hint">Compare path stats + overlay on map.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12 col-xl-7 map-col d-flex flex-column">
+                <div class="map-toolbar flex-shrink-0 px-3 py-2 border-bottom bg-map-toolbar d-flex flex-wrap align-items-center gap-2 justify-content-between">
+                    <div class="d-flex flex-wrap align-items-center gap-2">
+                        <span class="toolbar-label"><i class="fa-solid fa-map me-1 opacity-75"></i>Basemap</span>
+                        <select id="basemap-select" class="form-select form-select-sm w-auto"></select>
+                    </div>
+                    <div class="d-flex flex-wrap align-items-center gap-3 map-toggles">
+                        <div class="form-check form-switch m-0">
+                            <input class="form-check-input" type="checkbox" id="toggle-metro" checked>
+                            <label class="form-check-label small" for="toggle-metro">Metro</label>
+                        </div>
+                        <div class="form-check form-switch m-0">
+                            <input class="form-check-input" type="checkbox" id="toggle-traffic">
+                            <label class="form-check-label small" for="toggle-traffic">Load heat</label>
+                        </div>
+                        <div class="form-check form-switch m-0">
+                            <input class="form-check-input" type="checkbox" id="toggle-bus">
+                            <label class="form-check-label small" for="toggle-bus">Bus lines</label>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-soft" onclick="loadGraph()"><i class="fa-solid fa-rotate"></i></button>
+                    </div>
+                </div>
+                <div id="viz-toast" class="flex-shrink-0 px-3 pt-2"></div>
+                <div class="map-shell position-relative mx-3 mb-3 rounded-3 shadow-sm border overflow-hidden">
+                    <div id="real-map" class="leaflet-host w-100" aria-label="Transport network map"></div>
+                    <div id="traffic-slot-hint" class="map-corner-hint small d-none"><i class="fa-solid fa-chart-area me-1"></i></div>
+                    <div class="map-legend rounded-2 shadow-sm small">
+                        <div class="legend-title fw-semibold mb-2">Areas</div>
+                        <div class="legend-rows" id="legend-kind-rows"></div>
+                        <hr class="my-2 opacity-25">
+                        <div class="text-muted" style="font-size:.7rem;line-height:1.3">Road heat = modeled flow÷capacity.<br>Routes/teal vs A*/red dashed.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="raceModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow-lg">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title fw-semibold"><i class="fa-solid fa-flag-checkered text-warning me-2"></i>Algorithm bench</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body pt-2">
+        <p class="text-muted small mb-3"><span id="race-pair" class="fw-medium text-dark"></span></p>
+        <div class="row g-2 mb-3">
+          <div class="col-6">
+            <div class="race-stat-card border rounded-3 p-3 h-100">
+              <div class="text-muted text-uppercase small mb-1">Dijkstra</div>
+              <div class="h5 mb-0" id="race-d-time"></div>
+              <div class="small text-muted">Hops <span id="race-d-nodes"></span></div>
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="race-stat-card border rounded-3 p-3 h-100 border-danger-subtle">
+              <div class="text-danger text-uppercase small mb-1">A*</div>
+              <div class="h5 mb-0" id="race-a-time"></div>
+              <div class="small text-muted">Hops <span id="race-a-nodes"></span></div>
+            </div>
+          </div>
+        </div>
+        <button type="button" class="btn btn-accent text-white w-100 mb-2" onclick="plotBothFromRaceModal()">
+          <i class="fa-solid fa-code-compare me-2"></i>Plot both routes on map
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script>
+    /* Inlined geo — works even when /api/geo is blocked; map tiles still need HTTPS + allow third-party tiles */
+    window.__BOOT_GEO = {{ boot_geo | tojson }};
+</script>
+<script src="{{ url_for('static', filename='script.js') }}?v=cairolab21"></script>
+</body>
+</html>

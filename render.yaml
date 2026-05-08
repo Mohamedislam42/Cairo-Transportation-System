@@ -1,0 +1,12 @@
+# Optional Render Blueprint: New → Blueprint → paste this file, or attach repo and set manually.
+# https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: cairo-transport-lab
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./project/Dockerfile
+    dockerContext: ./project
+    autoDeploy: true
+    healthCheckPath: /api/health

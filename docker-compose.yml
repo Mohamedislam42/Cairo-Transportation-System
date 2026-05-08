@@ -1,0 +1,10 @@
+# Local / demo: same stack as production (Flask + Gunicorn + sklearn)
+services:
+  web:
+    build:
+      context: ./project
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: "8080"

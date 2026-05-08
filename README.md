@@ -91,4 +91,5 @@ This project was built for CSE112 to demonstrate practical use of:
 - Machine learning-assisted traffic estimation
 
 ## License
-This repository is for educational use. Add a formal license file if required by your instructor.
+
+This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.

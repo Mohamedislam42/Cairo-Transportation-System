@@ -325,9 +325,11 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script id="boot-geo" type="application/json">{{ boot_geo | tojson }}</script>
 <script>
-    /* Inlined geo — works even when /api/geo is blocked; map tiles still need HTTPS + allow third-party tiles */
-    window.__BOOT_GEO = {{ boot_geo | tojson }};
+    /* Keep Jinja output out of JS syntax to avoid editor parser errors. */
+    const bootGeoNode = document.getElementById('boot-geo');
+    window.__BOOT_GEO = bootGeoNode ? JSON.parse(bootGeoNode.textContent || "{}") : {};
 </script>
 <script src="{{ url_for('static', filename='script.js') }}?v=cairolab21"></script>
 </body>

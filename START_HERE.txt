@@ -1,2 +1,0 @@
-This folder contains everything for this version.
-Run app.py in PyCharm.
